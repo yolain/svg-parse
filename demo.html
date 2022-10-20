@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SVG格式化转换</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="discription" content="适用于Sketch导出的SVG，可将基本图形转换成Path路径与文字格式化">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+<textarea id="textarea"></textarea>
+<div id="result" hidden></div>
+<div style="margin:20px auto 0;text-align:center">
+    <button id="reset" hidden>重新编辑SVG代码</button>
+    <button id="generate" >生成SVG并格式化</button>
+    <button id="copy">复制SVG代码</button>
+</div>
+<div style="margin:20px auto 0;text-align:center">
+    <input type="checkbox" id="has_style" checked/> 保留图形样式
+</div>
+<textarea id="result_text"></textarea>
+
+<script src="./svg2path.js"></script>
+<script>
+textarea.setAttribute('placeholder',`请复制SVG代码到此处，并去除多余组，例如：\n
+<svg width="100px" height="100px" viewBox="0 0 100 100">
+  <g id="组1">
+    <rect></rect>
+  </g>
+  <g id="组2">
+    <circle></circle>
+  </g>
+</svg>
+`)
+generate.onclick = _ =>{
+    const svg_code = textarea.value
+    if(!svg_code) return
+    let div = document.createElement('div');
+    div.innerHTML = svg_code
+    convertSvg(div.getElementsByTagName('svg'))
+    textarea.style.display = 'none'
+    generate.setAttribute('hidden','')
+    reset.removeAttribute('hidden')
+    div.innerHTML = ''
+}
+reset.onclick = _ =>{
+    textarea.style.display = 'block'
+    generate.removeAttribute('hidden')
+    reset.setAttribute('hidden','')
+    result.innerHTML = ''
+    result.setAttribute('hidden','')
+}
+copy.onclick = _ =>{
+    if(!result.innerHTML) return
+    const range = document.createRange(); //创建range对象
+    result_text.innerText = result.innerHTML
+    range.selectNode(document.getElementById('result_text')); //获取复制内容的 id 选择器
+    const selection = window.getSelection();  //创建 selection对象
+    if (selection.rangeCount > 0) selection.removeAllRanges(); //如果页面已经有选取了的话，会自动删除这个选区，没有选区的话，会把这个选取加入选区
+    selection.addRange(range); //将range对象添加到selection选区当中，会高亮文本块
+    document.execCommand('copy'); //复制选中的文字到剪贴板
+    alert('复制SVG代码成功')
+    selection.removeRange(range); // 移除选中的元素
+}
+const convertSvg = parent => {
+    const isChecked = document.getElementById('has_style').checked;
+    const setAttr = (_node,_svg) =>{
+        const id = _node.getAttribute('id');
+        const transform = _node.getAttribute('transform');
+        const fill = _node.getAttribute('fill');
+        const stroke = _node.getAttribute('stroke');
+        const strokeLinecap = _node.getAttribute('stroke-linecap');
+        const strokeLinejoin = _node.getAttribute('stroke-linejoin');
+        const strokeWidth = _node.getAttribute('stroke-width');
+        if(id) _svg.setAttribute('id',id);
+        if(transform) _svg.setAttribute('transform',transform);
+        if(isChecked && fill) _svg.setAttribute('fill',fill);
+        if(isChecked && stroke) _svg.setAttribute('stroke',stroke);
+        if(isChecked && strokeLinecap) _svg.setAttribute('stroke-linecap',strokeLinecap);
+        if(isChecked && strokeLinejoin) _svg.setAttribute('stroke-linejoin',strokeLinejoin);
+        if(isChecked && strokeWidth) _svg.setAttribute('stroke-width',strokeWidth);
+    }
+    [].slice.call(parent).forEach(svg => {
+        let svgNew = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        const viewBox = svg.getAttribute('viewBox')
+        if(viewBox) svgNew.setAttribute('viewBox',viewBox);
+        result.appendChild(svgNew);
+        [].slice.call(svg.childNodes).forEach(nodes => {
+            if(String(nodes.tagName).toLowerCase() == 'g'){
+                let svgGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                setAttr(nodes,svgGroup)
+                svgNew.appendChild(svgGroup);
+                // 转换为路径
+                [].slice.call(nodes.childNodes).forEach(node=> {
+                    const tag = String(node.tagName).toLowerCase()
+                    // 如果是文字
+                    if(tag == 'text'){
+                        const fontSize = node.getAttribute('font-size');
+                        const setText = cate =>{
+                            let svgText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                            svgGroup.appendChild(svgText);
+                            const x = cate.getAttribute('x')
+                            const y = cate.getAttribute('y')
+                            const transform = cate.getAttribute('transform')
+                            const text = cate.innerHTML
+                            if(x) svgText.setAttribute('x',x)
+                            if(y) svgText.setAttribute('y',y)
+                            if(transform) svgText.setAttribute('y',transform)
+                            if(fontSize) svgText.setAttribute('font-size',fontSize)
+                            if(text) {
+                                svgText.setAttribute('id',text)
+                                svgText.innerHTML = text
+                            }
+                        }
+                        const childNodes = node.childNodes
+                        if(childNodes.length>1){
+                            [].slice.call(childNodes).forEach(cate => {
+                                if(cate.tagName == 'tspan'){
+                                    setText(cate)
+                                }
+                            })
+                        }else setText(childNodes[0].parentNode)
+                    }else{
+                        const path = svg2path(node);
+                        if (path) {
+                            let svgPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                            svgPath.setAttribute('d', path);
+                            svgGroup.appendChild(svgPath);
+                            setAttr(node,svgPath)
+                        }
+                    }
+                });
+            }
+        })
+    });
+    result.removeAttribute('hidden');
+};
+</script>
+
+</body>
+</html>
